@@ -1,0 +1,11 @@
+{
+  "name": "claude-sync",
+  "owner": { "name": "claude-sync maintainers" },
+  "plugins": [
+    {
+      "name": "sync-mailbox",
+      "source": "./plugins/sync-mailbox",
+      "description": "Human-approved Q&A between two Claude Code instances via GitHub Issues"
+    }
+  ]
+}

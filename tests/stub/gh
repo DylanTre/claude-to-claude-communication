@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Fake gh: logs argv, fails with $GH_EXIT, emulates --jq over $GH_FIXTURE with real jq.
+[ -n "$GH_LOG" ] && echo "gh $*" >> "$GH_LOG"
+if [ "${GH_EXIT:-0}" -ne 0 ]; then echo "stub gh: forced failure" >&2; exit "$GH_EXIT"; fi
+filter=""
+while [ $# -gt 0 ]; do
+  case "$1" in --jq) filter="$2"; shift 2;; *) shift;; esac
+done
+[ -n "$GH_FIXTURE" ] && [ -f "$GH_FIXTURE" ] || exit 0
+if [ -n "$filter" ]; then jq -r "$filter" < "$GH_FIXTURE" | tr -d '\r'; else cat "$GH_FIXTURE"; fi
