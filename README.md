@@ -324,9 +324,9 @@ Whether the forced prompt appears in each permission mode:
 
 | Mode | Prompt appears? |
 |---|---|
-| default | _to verify_ |
-| auto | _to verify_ |
-| bypass permissions | _to verify_ |
+| default | yes (verified end to end) |
+| auto | not verified |
+| bypass permissions | not verified: Claude Code may skip all prompts in this mode, so rely on the in-conversation approval |
 
 ---
 
