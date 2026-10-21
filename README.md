@@ -1,56 +1,326 @@
 # claude-sync: a mailbox between two Claude Code instances
 
-`sync-mailbox` is a Claude Code plugin. It lets the spec author's Claude and the implementer's Claude exchange structured questions and answers through Issues in a private GitHub repo. A human approves every message before it is posted.
+`sync-mailbox` is a Claude Code plugin. It lets two developers' Claude instances exchange structured questions and answers through a private GitHub repo. A human approves every message before it is posted.
+
+It was built for a common split:
+
+- the **spec side** writes the high-level specification with their Claude;
+- the **implementation side** owns architecture and code with their Claude.
+
+The implementation-side Claude reads the code, so it's usually the first to notice when the spec allows something it shouldn't. Without this plugin, that finding goes Claude → developer → colleague → colleague's Claude, and details get lost at every hand-off. With it, the finding goes straight from one Claude to the other in full, and each human reviews and approves what is said on their behalf.
+
+---
+
+## Contents
+
+1. [How it works](#how-it-works)
+2. [Prerequisites](#prerequisites)
+3. [One-time setup](#one-time-setup)
+4. [Daily usage](#daily-usage)
+5. [Commands in detail](#commands-in-detail)
+6. [Checking the inbox periodically](#checking-the-inbox-periodically)
+7. [What a good question looks like](#what-a-good-question-looks-like)
+8. [Labels and the life of a question](#labels-and-the-life-of-a-question)
+9. [Safety: approvals and permissions](#safety-approvals-and-permissions)
+10. [Configuration reference](#configuration-reference)
+11. [Updating the plugin](#updating-the-plugin)
+12. [Troubleshooting](#troubleshooting)
+13. [FAQ](#faq)
+14. [Development](#development)
+
+---
 
 ## How it works
 
-- One private GitHub repo is the **mailbox**. Each question is one issue, and replies are comments.
-- Labels route and track each question: `for:<role>`, `from:<role>`, `status:awaiting-answer | needs-info | answered`, `blocking`. A closed issue means the question is resolved.
-- When you start a session, Claude tells you if anything is waiting for you. Nothing is posted, relabeled, or closed without your explicit OK, and the plugin also forces a permission prompt for those commands.
+```
+ implementation side                   GitHub (private repo)                    spec side
+ ───────────────────                   ─────────────────────                    ─────────
+ Claude finds a spec gap
+ you validate the root cause
+ /sync-ask ──(you approve)──────────▶  issue #12  for:spec
+                                       status:awaiting-answer
+                                                                ◀── session start: "1 to answer [#12]"
+                                                                    /sync-inbox  (summary + draft answer)
+                                       comment: Decision…       ◀── /sync-reply 12 ──(colleague approves)
+                                       status:answered
+ session start: "1 answer to review"
+ Claude applies the answer (you agree)
+ /sync-close 12 ──(you approve)─────▶  issue closed
+```
 
-## Prerequisites (both developers)
+- **The mailbox** is one private GitHub repo. It holds no code. Its **Issues** are the messages.
+- **One issue is one question thread.** The question is the issue body, and answers and follow-ups are comments.
+- **Labels** say who has to act and what state the question is in (see [Labels](#labels-and-the-life-of-a-question)).
+- **Either side can ask.** The spec side can also ask the implementation side, for example "is this feasible?".
+- Claude does all GitHub access through the `gh` command-line tool, logged in as you.
 
-- Claude Code
-- GitHub CLI: install `gh`, then run `gh auth login`.
-- Windows: Git Bash (already required by Claude Code).
+---
+
+## Prerequisites
+
+Both developers need:
+
+| What | Why | How |
+|---|---|---|
+| Claude Code | obviously | — |
+| GitHub CLI (`gh`) | all mailbox access goes through it | install from https://cli.github.com, then run `gh auth login` |
+| Bash | the plugin's scripts are bash | macOS/Linux: built in. Windows: Git Bash, which Claude Code already requires |
+| Access to the mailbox repo | to read and post | the repo owner adds you as a collaborator |
+
+---
 
 ## One-time setup
 
-1. **Create the mailbox repo** (private), for example `acme/feature-x-sync`, and add your colleague as a collaborator.
-2. **Publish this plugin into it.** From this folder, push this repository's contents to the mailbox repo:
-   ```bash
-   git remote add origin https://github.com/acme/feature-x-sync.git
-   git push -u origin main
-   ```
-3. **Install, both of you,** in Claude Code:
-   ```
-   /plugin marketplace add acme/feature-x-sync
-   /plugin install sync-mailbox@claude-sync
-   ```
-   Restart Claude Code.
-4. **Configure each project** where you work on the feature (your code repo; your colleague's spec repo or folder):
-   ```
-   /sync-setup
-   ```
-   This asks for the mailbox repo and your role (`impl` or `spec`). It writes `.claude/sync-mailbox.env`, keeps that file out of git through `.git/info/exclude`, and creates the labels once you confirm. In projects without this file, the plugin does nothing.
-5. **Turn on GitHub notifications** for the mailbox repo (Watch → All activity), so you hear about messages when Claude Code is closed.
+### 1. Create the mailbox repo (one person, once)
 
-## Daily flow
+Create a **private** GitHub repo, for example `acme/feature-x-sync`, and add your colleague under *Settings → Collaborators*.
 
-| You | Command |
+### 2. Publish the plugin into it (one person, once)
+
+The mailbox repo also distributes the plugin, so you both get the same version. From this folder:
+
+```bash
+git remote add origin git@github.com:acme/feature-x-sync.git
+git push -u origin main
+```
+
+### 3. Install the plugin (both developers)
+
+In Claude Code:
+
+```
+/plugin marketplace add acme/feature-x-sync
+/plugin install sync-mailbox@claude-sync
+```
+
+Then restart Claude Code. The plugin is installed for your user, but it does nothing in a project until step 4.
+
+> To test from a local copy, use `/plugin marketplace add <path to this folder>` instead.
+
+### 4. Configure each project (both developers)
+
+Open Claude Code in the project where you work on the feature (the implementation side in the code repo; the spec side wherever the spec lives) and run:
+
+```
+/sync-setup
+```
+
+It will:
+
+1. check that `gh` is installed and logged in,
+2. ask for the mailbox repo (`acme/feature-x-sync`), your role (`impl` or `spec`), and the other side's role,
+3. write `.claude/sync-mailbox.env` in the project,
+4. add that file to `.git/info/exclude` so it is never committed (your `.gitignore` is not touched),
+5. create the mailbox labels, after asking you (only needed once per mailbox, safe to repeat),
+6. run a test inbox check.
+
+Repeat this in every project where you want the mailbox active. Projects without the config are completely unaffected.
+
+### 5. Turn on GitHub notifications (both developers, recommended)
+
+On the mailbox repo, choose *Watch → All activity*. You'll get email or mobile notifications even when Claude Code is closed.
+
+---
+
+## Daily usage
+
+### When you have a question for the other side
+
+1. Work normally. When Claude finds something the spec doesn't cover, or covers wrongly, investigate it with Claude until you agree on the root cause.
+2. Run `/sync-ask` (or just say *"ask the spec side about this"*).
+3. Review the draft Claude shows you. Edit anything, then approve.
+4. Claude posts it and gives you the issue link. Carry on with other work.
+
+### When something is waiting for you
+
+- At **session start** Claude tells you, for example: *"Sync mailbox: 2 to answer [#12, #14], 1 answers to review [#9]."*
+- Run `/sync-inbox` for a summary of each item, with draft answers.
+- Answer with `/sync-reply <n>`, or apply a received answer and close it with `/sync-close <n>`.
+
+### Cheat sheet
+
+| I want to… | Command | Plain-language alternative |
+|---|---|---|
+| set up a project | `/sync-setup` | "set up the sync mailbox here" |
+| ask the other side | `/sync-ask [topic]` | "ask the spec side about the retry limit" |
+| see what's waiting | `/sync-inbox` | "check the sync inbox" |
+| answer or ask back | `/sync-reply <n>` | "answer mailbox question 12" |
+| close an applied answer | `/sync-close <n>` | "close mailbox question 12, it's applied" |
+| check automatically | `/loop 30m /sync-inbox` | — |
+
+> If a command name clashes with another plugin, use the full name, for example `/sync-mailbox:sync-inbox`.
+
+---
+
+## Commands in detail
+
+### `/sync-setup`
+
+One-time setup per project; see [step 4](#4-configure-each-project-both-developers). Run it again whenever you want to check the setup, change the mailbox repo, or change your role. If a config already exists it shows it and asks before changing anything.
+
+### `/sync-ask [topic]`
+
+Drafts a question for the other side and posts it after your approval.
+
+- **`topic`** is optional. Without it, Claude uses whatever you were just discussing.
+- Claude fills the [question template](#what-a-good-question-looks-like) from the session and the code: the observation, the root cause, links to the code at the current commit, the exact spec passage, the options, and its recommendation.
+- If something essential is missing, for example the root cause isn't settled yet, Claude asks you instead of guessing.
+- It asks whether the question is **blocking** your work, and if so adds the `blocking` label so it goes to the top of the other side's inbox.
+- It shows you the full title, body, labels, and the exact `gh` command, and waits. Nothing is posted until you say yes.
+
+### `/sync-inbox`
+
+Shows what's waiting for you. **It never posts anything.**
+
+Items are sorted with blocking ones first, in three kinds:
+
+| Kind | Meaning | What Claude does |
+|---|---|---|
+| **answer** | a question addressed to you | summarizes it, reads the spec and code it references, and offers a draft answer, plus a spec change if one is needed |
+| **review** | your question was answered | summarizes the decision and proposes how to apply it to your current work |
+| **followup** | the other side asked you something back | explains what they need |
+
+### `/sync-reply <n>`
+
+Drafts and posts a reply on issue `n`. Claude works out what kind of reply is needed from the labels:
+
+| Situation | Reply | Status after |
+|---|---|---|
+| a question for you | an answer (decision, rationale, spec change, follow-ups) | `status:answered` |
+| a question for you that you can't answer yet | a follow-up question | `status:needs-info` |
+| the other side asked you back (`needs-info`) | your clarification | `status:awaiting-answer` |
+
+You see the exact comment and label change before anything is posted. If the answer needs a spec change on your side, Claude offers to make it afterwards as a separate step in your normal workflow.
+
+### `/sync-close <n>`
+
+Closes a question once its answer has been applied.
+
+- Only the person who **asked** closes it.
+- Claude asks you to confirm the answer was applied, then shows a one-line closing comment ("Applied in …") for your approval.
+
+---
+
+## Checking the inbox periodically
+
+There are three layers, from least to most effort:
+
+| When | How | Setup |
+|---|---|---|
+| Claude Code is closed | GitHub notifications | *Watch → All activity* on the mailbox repo |
+| A session starts | automatic notice | none, it's built in |
+| During a long session | `/loop` | type it once per session |
+
+### Using `/loop`
+
+```
+/loop 30m /sync-inbox
+```
+
+- Claude runs `/sync-inbox` every 30 minutes for as long as that session is open. Use any interval, such as `15m`, `1h`, or `2h`; every 30 to 60 minutes is usually enough.
+- It **only lasts for the session.** It stops when you exit, and you start it again next time. That's intentional: it runs only while someone is there to approve replies.
+- It **never posts**. It only reads and drafts.
+- To stop it early, ask Claude to stop the loop, or press Esc while it runs.
+
+**Quieter variant.** `/sync-inbox` reports even when the inbox is empty. To hear only when something has arrived:
+
+```
+/loop 30m check the sync mailbox with the inbox script; if it's empty, say nothing
+```
+
+---
+
+## What a good question looks like
+
+The point of the mailbox is that the other Claude can act **without the two of you having to talk**. Every question follows this template:
+
+```markdown
+**Question:** May an upload be retried indefinitely, or is there a limit?
+
+**What we observed:** A failing upload is retried forever; the client never surfaces an error.
+
+**Root cause:** Spec §4.2 says "failed uploads are retried" with no limit or backoff.
+
+**Code evidence:**
+- https://github.com/acme/app/blob/3f2c1a9/src/upload/retry.ts#L40-L52: the retry loop
+  ```ts
+  while (!ok) { ok = await tryUpload(file); }
+  ```
+
+**Spec reference:** acme/spec/upload.md@8d1e0b2#retries
+> Failed uploads are retried.
+
+**Options:**
+1. Fixed limit (e.g. 5) then error: simple; user sees failures quickly.
+2. Exponential backoff up to 1 h: resilient; failures surface late.
+
+**Recommendation:** Option 1 with a limit of 5; it matches the error UX already in §6.
+
+**Blocking?** Yes, the upload error screen depends on it.
+```
+
+Answers follow a short template:
+
+```markdown
+**Decision:** Option 1, limit 5, with 2 s / 4 s / 8 s / 16 s backoff.
+**Rationale:** …
+**Spec change:** §4.2 now reads "…" (spec repo, commit 91ab3c0)
+**Follow-ups:** Show the error screen from §6 after the 5th failure.
+```
+
+Rules Claude follows when writing questions:
+
+- **Code evidence is a link to a fixed commit**, plus a short preview of at most about 15 lines. Never whole files. Both sides can open the code repo, so the link is what counts.
+- **Never** secrets, tokens, credentials, personal data, or `.env` contents.
+- No shorthand only one side understands, and no "as discussed".
+
+---
+
+## Labels and the life of a question
+
+| Label | Meaning |
 |---|---|
-| Found a spec gap with Claude, root cause understood: post it | `/sync-ask [topic]` (or just "ask the spec side about this") |
-| See what's waiting for you, with draft answers | `/sync-inbox` |
-| Answer, or ask back | `/sync-reply <n>` |
-| The answer has been applied: close the question | `/sync-close <n>` |
+| `for:impl` / `for:spec` | who must answer |
+| `from:impl` / `from:spec` | who asked |
+| `status:awaiting-answer` | waiting on whoever must answer |
+| `status:needs-info` | the answerer asked a follow-up; waiting on the asker |
+| `status:answered` | answer posted; the asker should review and apply it |
+| `blocking` | the asker is blocked until this is answered |
+| *(issue closed)* | resolved |
 
-At session start, Claude mentions waiting items automatically. For periodic checks during a long session, run `/loop 30m /sync-inbox`.
+```
+            /sync-ask                   /sync-reply (answer)                 /sync-close
+  (new) ──────────────▶ awaiting-answer ─────────────────────▶ answered ─────────────▶ closed
+                          │      ▲
+     /sync-reply          │      │  /sync-reply
+     (follow-up question) ▼      │  (asker clarifies)
+                         needs-info
+```
 
-## Permissions
+**Your inbox** is every open issue where:
+- it's `for:<you>` and `status:awaiting-answer` → you need to answer; or
+- it's `from:<you>` and `status:answered` → you need to review and apply; or
+- it's `from:<you>` and `status:needs-info` → you need to clarify.
+
+You can also read and browse everything on GitHub as normal.
+
+---
+
+## Safety: approvals and permissions
+
+**Rule:** Claude never posts, comments, changes labels, or closes anything in the mailbox without your explicit approval of that exact text and action.
+
+It's enforced in two independent ways:
+
+1. **In conversation:** the plugin's instructions require Claude to show you the exact text and command and wait for a yes, and to show it again after any edit.
+2. **In Claude Code itself:** a `PreToolUse` hook catches any `gh` write aimed at the mailbox repo (`issue create/comment/edit/close/…`, `label create/edit/delete`, `gh api`) and forces a permission prompt, even if your settings would normally allow the command. `gh` commands against other repos are not affected.
+
+Recommended settings:
 
 - It's fine to allow reads: `Bash(gh issue list:*)` and `Bash(gh issue view:*)`.
-- **Don't** allow `gh` writes (`gh issue create/comment/edit/close`, `gh api`) in your settings.
-- The plugin's `PreToolUse` hook returns "ask" for any `gh` write that targets the mailbox repo, even if your allow-list would permit it. Behavior per permission mode:
+- **Don't** add `gh` writes to your allow-list.
+
+Whether the forced prompt appears in each permission mode:
 
 | Mode | Prompt appears? |
 |---|---|
@@ -58,13 +328,94 @@ At session start, Claude mentions waiting items automatically. For periodic chec
 | auto | _to verify_ |
 | bypass permissions | _to verify_ |
 
-## Updating
+---
 
-1. Bump `version` in `plugins/sync-mailbox/.claude-plugin/plugin.json`, commit, and push to the mailbox repo.
-2. Both developers run `/plugin marketplace update claude-sync`, then `/plugin update sync-mailbox@claude-sync`, and restart.
+## Configuration reference
+
+Per project, in `.claude/sync-mailbox.env` (written by `/sync-setup`, never committed):
+
+```
+SYNC_MAILBOX_REPO=acme/feature-x-sync
+SYNC_MAILBOX_ROLE=impl
+```
+
+| Key | Meaning |
+|---|---|
+| `SYNC_MAILBOX_REPO` | the mailbox repo, `owner/name` |
+| `SYNC_MAILBOX_ROLE` | your role; letters, digits, `-` and `_` only. Usually `impl` or `spec` |
+
+- `#` comment lines and blank lines are allowed. Windows line endings are fine.
+- No file means the plugin is inactive in that project: no notice, no guard, no network calls.
+- A project points to exactly one mailbox. If you work on several features in different projects, configure each one.
+- Roles other than `impl` and `spec` work too. Use the same two roles on both sides, and pass both to `/sync-setup` so the matching labels exist.
+
+---
+
+## Updating the plugin
+
+Maintainer:
+1. Bump `version` in `plugins/sync-mailbox/.claude-plugin/plugin.json`.
+2. Commit and push to the mailbox repo.
+
+Both developers:
+```
+/plugin marketplace update claude-sync
+/plugin update sync-mailbox@claude-sync
+```
+Then restart Claude Code.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| *"Sync mailbox: could not reach GitHub via gh…"* at session start | offline, `gh` not installed, or not logged in | `gh auth status`; `gh auth login`; then `/sync-setup` to check |
+| No notice at session start, but you expect items | no config in this project, or the labels are wrong on the issue | check `.claude/sync-mailbox.env`; on GitHub, make sure the issue has `for:<you>` plus a status label |
+| `/sync-setup` says the repo isn't reachable | typo, or you're not a collaborator | `gh repo view owner/name`; ask the owner to add you |
+| `/sync-inbox` not found | name clash with another plugin, or the plugin isn't installed | use `/sync-mailbox:sync-inbox`; check `/plugin` |
+| Label errors when posting | labels never created in this mailbox | run `/sync-setup` and approve the label step |
+| Scripts fail with `$'\r': command not found` | the plugin files got Windows line endings | re-clone; the repo's `.gitattributes` forces LF on scripts |
+| An item stays in your inbox after you answered | the status label wasn't switched | on GitHub, replace `status:awaiting-answer` with `status:answered` |
+
+---
+
+## FAQ
+
+**Can the two Claudes talk to each other on their own?**
+No, by design. Every outgoing message is approved by its human. The mailbox removes the relaying between people, not their oversight.
+
+**Does the spec have to be in the same repo as the code?**
+No. Questions reference the spec by location, whether that's a path at a commit in any repo or a document URL plus section. The spec side runs `/sync-setup` wherever they work on the spec.
+
+**What if the spec change is big?**
+The mailbox carries the *decision*. The spec side makes the actual edit in their normal workflow and links it in the answer's "Spec change" field.
+
+**Can we use GitLab instead?**
+Not yet. The same design works with `glab`, but only GitHub is implemented.
+
+**Is our code sent anywhere new?**
+Only the short previews and links you approve in each question, posted to your own private repo.
+
+---
 
 ## Development
 
-- Tests: `bash tests/run.sh`. They need bash, plus the standalone `jq` binary, which the fake `gh` uses.
-- Validate: `claude plugin validate .`
-- Design and plan: `docs/specs/`, `docs/superpowers/plans/`.
+```
+.claude-plugin/marketplace.json        marketplace "claude-sync"
+plugins/sync-mailbox/
+  .claude-plugin/plugin.json           plugin manifest (version lives here)
+  hooks/hooks.json                     SessionStart notice + PreToolUse write guard
+  scripts/lib.sh                       config loader
+  scripts/inbox.sh                     inbox query (one gh call)
+  scripts/session-start.sh             session-start notice
+  scripts/guard-writes.sh              forces a prompt on mailbox writes
+  scripts/setup-labels.sh              creates/updates labels
+  skills/sync-mailbox/SKILL.md         rules and templates Claude follows
+  commands/*.md                        the five slash commands
+tests/                                 bash tests with a fake gh
+docs/                                  design spec and implementation plan
+```
+
+- Run the tests: `bash tests/run.sh`. They need bash and the standalone `jq`, which the fake `gh` uses.
+- Validate the plugin: `claude plugin validate .`
