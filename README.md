@@ -1,6 +1,6 @@
 # claude-sync: a mailbox between two Claude Code instances
 
-`sync-mailbox` is a Claude Code plugin. It lets two developers' Claude instances exchange structured questions and answers through a private GitHub repo. A human approves every message before it is posted.
+`sync-mailbox` is a Claude Code plugin. It lets two developers' Claude instances exchange structured questions and answers through a private GitHub repo or GitLab project. A human approves every message before it is posted.
 
 It was built for a common split:
 
@@ -16,6 +16,8 @@ The implementation-side Claude reads the code, so it's usually the first to noti
 1. [How it works](#how-it-works)
 2. [Prerequisites](#prerequisites)
 3. [Setup from scratch](#setup-from-scratch)
+   - [Path A: GitHub mailbox](#path-a-github-mailbox)
+   - [Path B: GitLab mailbox](#path-b-gitlab-mailbox) (incl. self-hosted)
    - [One-time setup: details](#one-time-setup-details)
 4. [Daily usage](#daily-usage)
 5. [Commands in detail](#commands-in-detail)
@@ -34,7 +36,7 @@ The implementation-side Claude reads the code, so it's usually the first to noti
 ## How it works
 
 ```
- implementation side                   GitHub (private repo)                    spec side
+ implementation side               GitHub or GitLab (private)                  spec side
  ───────────────────                   ─────────────────────                    ─────────
  Claude finds a spec gap
  you validate the root cause
@@ -49,64 +51,77 @@ The implementation-side Claude reads the code, so it's usually the first to noti
  /sync-close 12 ──(you approve)─────▶  issue closed
 ```
 
-- **The mailbox** is one private GitHub repo. It holds no code. Its **Issues** are the messages.
+- **The mailbox** is one private GitHub repo or GitLab project (gitlab.com or your own server). It holds no code. Its **Issues** are the messages.
 - **One issue is one question thread.** The question is the issue body, and answers and follow-ups are comments.
 - **Labels** say who has to act and what state the question is in (see [Labels](#labels-and-the-life-of-a-question)).
 - **Either side can ask.** The spec side can also ask the implementation side, for example "is this feasible?".
-- Claude does all GitHub access through the `gh` command-line tool, logged in as you.
+- Claude does all mailbox access through the official command-line tool, `gh` for GitHub or `glab` for GitLab, logged in as you.
 
 ---
 
 ## Prerequisites
 
-Both developers need:
+The mailbox can live on **GitHub** or on a **GitLab** server, including your company's own self-hosted GitLab. Both developers need:
 
-| What | Why |
-|---|---|
-| A GitHub account | the mailbox is a GitHub repo |
-| Claude Code | runs the plugin |
-| Git (on Windows: Git for Windows, which includes Git Bash) | Claude Code and the plugin's bash scripts need it |
-| GitHub CLI (`gh`), logged in, or the GitLab CLI (`glab`) for a GitLab mailbox | all mailbox access goes through it |
-| Collaborator access to the mailbox repo | to read and post |
+| What | GitHub mailbox | GitLab mailbox |
+|---|---|---|
+| An account | on github.com | on your GitLab server |
+| Claude Code | ✓ | ✓ |
+| Git (on Windows: Git for Windows, which includes Git Bash) | ✓ | ✓ |
+| The command-line tool, logged in | GitHub CLI, `gh` | GitLab CLI, `glab` |
+| Access to the mailbox | collaborator on the repo | project member, **Reporter** or higher |
+| Network | internet | must reach the GitLab server (office network or VPN if it's internal) |
 
-[Setup from scratch](#setup-from-scratch) walks through installing every one of these.
+[Setup from scratch](#setup-from-scratch) walks through every step for both.
 
 ---
 
 ## Setup from scratch
 
-There are two repos involved, and it helps to keep them apart:
+### The two repos
 
-| Repo | What it holds | Visibility |
+| Repo | What it holds | Where |
 |---|---|---|
-| **Plugin repo**: [`DylanTre/claude-to-claude-communication`](https://github.com/DylanTre/claude-to-claude-communication) | this plugin's code; Claude Code installs from it | public, so anyone can install it |
-| **Mailbox repo**: e.g. `acme/feature-x-sync` | only the issues (the messages) for one collaboration | **private**: only the two of you |
+| **Plugin repo**: [`DylanTre/claude-to-claude-communication`](https://github.com/DylanTre/claude-to-claude-communication) | this plugin's code; Claude Code installs from it | public on GitHub, so anyone can install it, even GitLab-only teams; no GitHub account is needed |
+| **Mailbox** | only the issues (the messages) for one collaboration | **private**, on GitHub *or* GitLab: your choice |
 
-The plugin repo is shared by everyone. Create one mailbox repo per collaboration, for example per feature or per pair of people.
+Create one mailbox per collaboration, for example per feature or per pair of people. Each project on your machine points to one mailbox, so you can have some on GitHub and some on GitLab.
 
-The setup has three parts: **A** is done by both developers, **B** by whoever owns the mailbox, and **C** by both again.
+### Overview: pick a path
 
-### A. Install the tools (both developers)
+| Step | Who | GitHub mailbox | GitLab mailbox |
+|---|---|---|---|
+| 1. Common tools | both | [Part 1](#part-1-common-tools-both-developers) | [Part 1](#part-1-common-tools-both-developers) |
+| 2. CLI and mailbox | both, plus the owner | [Path A: GitHub](#path-a-github-mailbox) | [Path B: GitLab](#path-b-gitlab-mailbox) |
+| 3. Plugin and configuration | both | [Part 3](#part-3-install-the-plugin-and-configure-both-developers) | [Part 3](#part-3-install-the-plugin-and-configure-both-developers) |
 
-**A1. Git.**
+Both developers must use the **same** mailbox, so agree on the path first.
+
+### Part 1. Common tools (both developers)
+
+**1.1 Git.**
 - Windows: install *Git for Windows* from https://git-scm.com/download/win with the default options. This also installs **Git Bash**, which Claude Code and this plugin use.
 - macOS: run `xcode-select --install`, or `brew install git`.
 - Linux: use your package manager, for example `sudo apt install git`.
 
-**A2. Claude Code.**
+**1.2 Claude Code.**
 - Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`
 - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`
 
 Then run `claude` once and log in. Full instructions: https://docs.claude.com/en/docs/claude-code/setup
 
-**A3. GitHub CLI.**
+Now follow **either** Path A **or** Path B.
+
+### Path A: GitHub mailbox
+
+**A1. Install the GitHub CLI** (both developers).
 - Windows: `winget install --id GitHub.cli`
 - macOS: `brew install gh`
 - Linux: see https://github.com/cli/cli#installation
 
 Open a **new** terminal afterwards, so `gh` is on your PATH.
 
-**A4. Log `gh` in to GitHub.**
+**A2. Log `gh` in** (both developers).
 ```
 gh auth login
 ```
@@ -116,66 +131,79 @@ gh auth status
 ```
 It should say *Logged in to github.com account <you>*, and the token scopes should include `repo`.
 
-### B. Create the mailbox (the owner, once per collaboration)
-
-**B1. Create a private repo.** It holds no code.
+**A3. Create a private mailbox repo** (the owner, once per collaboration). It holds no code.
 ```
 gh repo create <owner>/feature-x-sync --private --description "Claude sync mailbox for feature X"
 ```
 (Or use the website: *New repository → Private*.)
 
-**B2. Invite your colleague.**
+**A4. Invite your colleague** (the owner).
 ```
 gh api -X PUT repos/<owner>/feature-x-sync/collaborators/<their-github-username> -f permission=push
 ```
 (Or on the website: *Settings → Collaborators → Add people*.)
 
-**B3. Your colleague accepts the invitation,** either from the email GitHub sends or at `https://github.com/<owner>/feature-x-sync/invitations`. Until they accept, they can't see the repo.
+**A5. Accept the invitation** (the colleague), either from the email GitHub sends or at `https://github.com/<owner>/feature-x-sync/invitations`. Until they accept, they can't see the repo.
 
-**B4. Tell your colleague the mailbox name** (`<owner>/feature-x-sync`) and which role each of you takes, normally `impl` for the implementation side and `spec` for the spec side.
+**A6. Agree on the details:** the mailbox name (`<owner>/feature-x-sync`) and who takes which role, normally `impl` for the implementation side and `spec` for the spec side.
 
-The labels get created in step C2, so there's nothing else to do here.
+The labels get created during configuration (Part 3), so continue with [Part 3](#part-3-install-the-plugin-and-configure-both-developers).
 
-### B (GitLab). Mailbox on your company GitLab instead
+### Path B: GitLab mailbox
 
-Use this when the conversation should stay on your own servers. It replaces part B, and part A3/A4 is for `glab` instead of `gh`.
+Use this to keep the conversation on your own servers. It works with gitlab.com and with self-hosted GitLab. The examples use `gitlab.yourcompany.com`.
 
-**Install `glab`** (GitLab's official CLI), both developers:
+**B1. Install the GitLab CLI, `glab`** (both developers).
 - Windows: `winget install --id GLab.GLab`
 - macOS: `brew install glab`
 - Linux: see https://gitlab.com/gitlab-org/cli#installation
 
-**Log in to your server**, both developers:
+Open a **new** terminal afterwards, so `glab` is on your PATH.
+
+**B2. Create a personal access token** (both developers). In GitLab, go to *your avatar → Preferences → Access tokens → Add new token*, tick the **`api`** scope, set an expiry date, and copy the token.
+
+**B3. Log `glab` in to your server** (both developers).
 ```
 glab auth login --hostname gitlab.yourcompany.com
+```
+Paste the token when asked. Check that it worked:
+```
 glab auth status --hostname gitlab.yourcompany.com
 ```
-When asked, paste a personal access token with the `api` scope (create one in GitLab under *Preferences → Access tokens*).
 
-**Create the mailbox project** (the owner): in GitLab, choose *New project → Create blank project*, set it to **Private**, and leave Issues enabled. For example: `team/sync/feature-x-sync`.
+**B4. Check you can reach the server** (both developers, especially whoever works remotely). If your GitLab is only reachable on the office network or VPN, the remote side needs that connection whenever they use the mailbox. Without it, the session-start notice says *"could not reach GitLab … (offline, VPN, or not logged in?)"*.
 
-**Invite your colleague** (the owner): *Manage → Members → Invite members*, with the role **Reporter** or higher. Reporter is enough to comment and change labels.
+**B5. Create a private mailbox project** (the owner, once per collaboration). In GitLab, choose *New project → Create blank project*, set **Visibility: Private**, and leave Issues enabled. For example: `team/sync/feature-x-sync`. It holds no code.
 
-**Reachability:** both developers must be able to reach the server. If your GitLab is only reachable on the office network or VPN, the remote side needs that connection. Without it, their session-start notice says *"could not reach GitLab … (offline, VPN, or not logged in?)"*.
+**B6. Add your colleague** (the owner). Go to *Manage → Members → Invite members* and choose the role **Reporter** or higher. Reporter is enough to open issues, comment, and change labels.
 
-In `/sync-setup` (step C2), answer **GitLab**, give the host (`gitlab.yourcompany.com`) and the project path (`team/sync/feature-x-sync`). Everything else works the same as on GitHub. You can have GitHub mailboxes in some projects and GitLab mailboxes in others.
+**B7. Agree on the details:** the host (`gitlab.yourcompany.com`), the project path (`team/sync/feature-x-sync`), and who takes which role (`impl` / `spec`).
 
-### C. Install and configure (both developers)
+Continue with Part 3.
 
-**C1. Install the plugin.** In Claude Code (any folder):
+### Part 3. Install the plugin and configure (both developers)
+
+**3.1 Install the plugin.** In Claude Code (any folder):
 ```
 /plugin marketplace add DylanTre/claude-to-claude-communication
 /plugin install sync-mailbox@claude-sync
 ```
-Then exit and restart Claude Code. The plugin is installed for your user, but it does nothing in a project until you configure it in C2.
+Then exit and restart Claude Code. The plugin is installed for your user, but it does nothing in a project until step 3.2. It comes from the public GitHub repo for both paths.
 
 > To try out a local copy instead, use `/plugin marketplace add <path to a clone of this repo>`.
 
-**C2. Configure each project.** Follow [Configure each project](#configure-each-project) below.
+**3.2 Configure each project.** Run `/sync-setup` and answer the questions. See [Configure each project](#configure-each-project) for details.
 
-**C3. Turn on notifications.** Follow [Turn on GitHub notifications](#turn-on-github-notifications) below.
+| Question | Path A: GitHub | Path B: GitLab |
+|---|---|---|
+| Where is the mailbox? | GitHub | GitLab |
+| Host | — | `gitlab.yourcompany.com` |
+| Mailbox repo | `<owner>/feature-x-sync` | `team/sync/feature-x-sync` |
+| Your role / the other role | `impl` / `spec` (or the reverse) | same |
 
-**C4. Smoke test,** about 2 minutes:
+**3.3 Turn on notifications.** See [Turn on notifications](#turn-on-notifications).
+
+**3.4 Smoke test,** about 2 minutes:
 1. Implementation side: `/sync-ask this is a setup test, invent a trivial question`, approve it, and note the issue number.
 2. Spec side: restart Claude Code. The session-start notice should mention the issue. Then run `/sync-reply <n>` and approve.
 3. Implementation side: restart. The notice should say *1 answers to review*. Then run `/sync-close <n>`.
@@ -196,18 +224,21 @@ Open Claude Code in the project where you work on the feature (the implementatio
 
 It will:
 
-1. check that `gh` is installed and logged in,
-2. ask for the mailbox repo (`acme/feature-x-sync`), your role (`impl` or `spec`), and the other side's role,
+1. ask where the mailbox lives (GitHub or GitLab, plus the host for GitLab), the mailbox repo (`acme/feature-x-sync` or `team/sync/feature-x-sync`), your role (`impl` or `spec`), and the other side's role,
+2. check that `gh` or `glab` is installed and logged in (for GitLab, to that host),
 3. write `.claude/sync-mailbox.env` in the project,
 4. add that file to `.git/info/exclude` so it is never committed (your `.gitignore` is not touched),
-5. create the mailbox labels, after asking you (only needed once per mailbox, safe to repeat),
-6. run a test inbox check.
+5. check that the mailbox is reachable,
+6. create the mailbox labels, after asking you (only needed once per mailbox, safe to repeat).
 
 Repeat this in every project where you want the mailbox active. Projects without the config are completely unaffected.
 
-### Turn on GitHub notifications
+### Turn on notifications
 
-On the mailbox repo, choose *Watch → All activity*. You'll get email or mobile notifications even when Claude Code is closed.
+So you hear about new messages even when Claude Code is closed:
+
+- **GitHub:** on the mailbox repo, choose *Watch → All activity*.
+- **GitLab:** on the mailbox project, click the bell icon and choose *Watch*.
 
 ---
 
@@ -255,7 +286,7 @@ Drafts a question for the other side and posts it after your approval.
 - Claude fills the [question template](#what-a-good-question-looks-like) from the session and the code: the observation, the root cause, links to the code at the current commit, the exact spec passage, the options, and its recommendation.
 - If something essential is missing, for example the root cause isn't settled yet, Claude asks you instead of guessing.
 - It asks whether the question is **blocking** your work, and if so adds the `blocking` label so it goes to the top of the other side's inbox.
-- It shows you the full title, body, labels, and the exact `gh` command, and waits. Nothing is posted until you say yes.
+- It shows you the full title, body, labels, and the exact `gh`/`glab` command, and waits. Nothing is posted until you say yes.
 
 ### `/sync-inbox`
 
@@ -296,7 +327,7 @@ There are three layers, from least to most effort:
 
 | When | How | Setup |
 |---|---|---|
-| Claude Code is closed | GitHub notifications | *Watch → All activity* on the mailbox repo |
+| Claude Code is closed | GitHub or GitLab notifications | GitHub: *Watch → All activity*; GitLab: bell icon → *Watch* |
 | A session starts | automatic notice | none, it's built in |
 | During a long session | `/loop` | type it once per session |
 
@@ -391,7 +422,7 @@ Rules Claude follows when writing questions:
 - it's `from:<you>` and `status:answered` → you need to review and apply; or
 - it's `from:<you>` and `status:needs-info` → you need to clarify.
 
-You can also read and browse everything on GitHub as normal.
+You can also read and browse everything on GitHub or GitLab as normal.
 
 ---
 
@@ -402,12 +433,12 @@ You can also read and browse everything on GitHub as normal.
 It's enforced in two independent ways:
 
 1. **In conversation:** the plugin's instructions require Claude to show you the exact text and command and wait for a yes, and to show it again after any edit.
-2. **In Claude Code itself:** a `PreToolUse` hook catches any `gh` write aimed at the mailbox repo (`issue create/comment/edit/close/…`, `label create/edit/delete`, `gh api`) and forces a permission prompt, even if your settings would normally allow the command. `gh` commands against other repos are not affected.
+2. **In Claude Code itself:** a `PreToolUse` hook catches any `gh` or `glab` write aimed at the mailbox (`issue create/comment/note/edit/update/close/…`, label changes, `api`, repo admin) and forces a permission prompt, even if your settings would normally allow the command. Commands against other repos are not affected.
 
 Recommended settings:
 
-- It's fine to allow reads: `Bash(gh issue list:*)` and `Bash(gh issue view:*)`.
-- **Don't** add `gh` writes to your allow-list.
+- It's fine to allow reads: `Bash(gh issue list:*)`, `Bash(gh issue view:*)`, `Bash(glab issue list:*)`, `Bash(glab issue view:*)`.
+- **Don't** add `gh` or `glab` writes to your allow-list.
 
 Whether the forced prompt appears in each permission mode:
 
@@ -471,12 +502,14 @@ Then restart Claude Code.
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | *"Sync mailbox: could not reach GitHub via gh…"* at session start | offline, `gh` not installed, or not logged in | `gh auth status`; `gh auth login`; then `/sync-setup` to check |
-| No notice at session start, but you expect items | no config in this project, or the labels are wrong on the issue | check `.claude/sync-mailbox.env`; on GitHub, make sure the issue has `for:<you>` plus a status label |
-| `/sync-setup` says the repo isn't reachable | typo, or you're not a collaborator | `gh repo view owner/name`; ask the owner to add you |
+| No notice at session start, but you expect items | no config in this project, or the labels are wrong on the issue | check `.claude/sync-mailbox.env`; on GitHub/GitLab, make sure the issue has `for:<you>` plus a status label |
+| *"Sync mailbox: could not reach GitLab (host) via glab…"* at session start | off the company network/VPN, `glab` not installed, or not logged in to that host | connect to the network; `glab auth status --hostname <host>`; `glab auth login --hostname <host>` |
+| `/sync-setup` says the mailbox isn't reachable | typo, or you're not a collaborator / project member | GitHub: `gh repo view owner/name`; GitLab: open `https://<host>/<group>/<project>` in a browser; ask the owner to add you |
+| GitLab token stopped working | the personal access token expired | create a new token with the `api` scope and run `glab auth login --hostname <host>` again |
 | `/sync-inbox` not found | name clash with another plugin, or the plugin isn't installed | use `/sync-mailbox:sync-inbox`; check `/plugin` |
 | Label errors when posting | labels never created in this mailbox | run `/sync-setup` and approve the label step |
 | Scripts fail with `$'\r': command not found` | the plugin files got Windows line endings | re-clone; the repo's `.gitattributes` forces LF on scripts |
-| An item stays in your inbox after you answered | the status label wasn't switched | on GitHub, replace `status:awaiting-answer` with `status:answered` |
+| An item stays in your inbox after you answered | the status label wasn't switched | on GitHub/GitLab, replace `status:awaiting-answer` with `status:answered` |
 
 ---
 
@@ -492,7 +525,7 @@ No. Questions reference the spec by location, whether that's a path at a commit 
 The mailbox carries the *decision*. The spec side makes the actual edit in their normal workflow and links it in the answer's "Spec change" field.
 
 **Can we use GitLab instead?**
-Yes, including a self-hosted GitLab, so conversations stay on your servers. See [B (GitLab)](#b-gitlab-mailbox-on-your-company-gitlab-instead). The choice is made per project, so you can mix GitHub and GitLab mailboxes.
+Yes, including a self-hosted GitLab, so conversations stay on your servers. See [Path B: GitLab mailbox](#path-b-gitlab-mailbox). The choice is made per project, so you can mix GitHub and GitLab mailboxes.
 
 **Is our code sent anywhere new?**
 Only the short previews and links you approve in each question, posted to your own private repo.
@@ -517,5 +550,5 @@ tests/                                 bash tests with a fake gh
 docs/                                  design spec and implementation plan
 ```
 
-- Run the tests: `bash tests/run.sh`. They need bash and the standalone `jq`, which the fake `gh` uses.
+- Run the tests: `bash tests/run.sh`. They need bash and the standalone `jq`, which the fake `gh` uses (the fake `glab` needs nothing extra).
 - Validate the plugin: `claude plugin validate .`
