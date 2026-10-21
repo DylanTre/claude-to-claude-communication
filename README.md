@@ -15,7 +15,8 @@ The implementation-side Claude reads the code, so it's usually the first to noti
 
 1. [How it works](#how-it-works)
 2. [Prerequisites](#prerequisites)
-3. [One-time setup](#one-time-setup)
+3. [Setup from scratch](#setup-from-scratch)
+   - [One-time setup: details](#one-time-setup-details)
 4. [Daily usage](#daily-usage)
 5. [Commands in detail](#commands-in-detail)
 6. [Checking the inbox periodically](#checking-the-inbox-periodically)
@@ -60,44 +61,108 @@ The implementation-side Claude reads the code, so it's usually the first to noti
 
 Both developers need:
 
-| What | Why | How |
-|---|---|---|
-| Claude Code | obviously | — |
-| GitHub CLI (`gh`) | all mailbox access goes through it | install from https://cli.github.com, then run `gh auth login` |
-| Bash | the plugin's scripts are bash | macOS/Linux: built in. Windows: Git Bash, which Claude Code already requires |
-| Access to the mailbox repo | to read and post | the repo owner adds you as a collaborator |
+| What | Why |
+|---|---|
+| A GitHub account | the mailbox is a GitHub repo |
+| Claude Code | runs the plugin |
+| Git (on Windows: Git for Windows, which includes Git Bash) | Claude Code and the plugin's bash scripts need it |
+| GitHub CLI (`gh`), logged in | all mailbox access goes through it |
+| Collaborator access to the mailbox repo | to read and post |
+
+[Setup from scratch](#setup-from-scratch) walks through installing every one of these.
 
 ---
 
-## One-time setup
+## Setup from scratch
 
-### 1. Create the mailbox repo (one person, once)
+There are two repos involved, and it helps to keep them apart:
 
-Create a **private** GitHub repo, for example `acme/feature-x-sync`, and add your colleague under *Settings → Collaborators*.
+| Repo | What it holds | Visibility |
+|---|---|---|
+| **Plugin repo**: [`DylanTre/claude-to-claude-communication`](https://github.com/DylanTre/claude-to-claude-communication) | this plugin's code; Claude Code installs from it | public, so anyone can install it |
+| **Mailbox repo**: e.g. `acme/feature-x-sync` | only the issues (the messages) for one collaboration | **private**: only the two of you |
 
-### 2. Publish the plugin into it (one person, once)
+The plugin repo is shared by everyone. Create one mailbox repo per collaboration, for example per feature or per pair of people.
 
-The mailbox repo also distributes the plugin, so you both get the same version. From this folder:
+The setup has three parts: **A** is done by both developers, **B** by whoever owns the mailbox, and **C** by both again.
 
-```bash
-git remote add origin git@github.com:acme/feature-x-sync.git
-git push -u origin main
+### A. Install the tools (both developers)
+
+**A1. Git.**
+- Windows: install *Git for Windows* from https://git-scm.com/download/win with the default options. This also installs **Git Bash**, which Claude Code and this plugin use.
+- macOS: run `xcode-select --install`, or `brew install git`.
+- Linux: use your package manager, for example `sudo apt install git`.
+
+**A2. Claude Code.**
+- Windows (PowerShell): `irm https://claude.ai/install.ps1 | iex`
+- macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`
+
+Then run `claude` once and log in. Full instructions: https://docs.claude.com/en/docs/claude-code/setup
+
+**A3. GitHub CLI.**
+- Windows: `winget install --id GitHub.cli`
+- macOS: `brew install gh`
+- Linux: see https://github.com/cli/cli#installation
+
+Open a **new** terminal afterwards, so `gh` is on your PATH.
+
+**A4. Log `gh` in to GitHub.**
 ```
-
-### 3. Install the plugin (both developers)
-
-In Claude Code:
-
+gh auth login
 ```
-/plugin marketplace add acme/feature-x-sync
+Choose *GitHub.com*, then *SSH* or *HTTPS* (either works), then *Login with a web browser*, and follow the prompts. Check that it worked:
+```
+gh auth status
+```
+It should say *Logged in to github.com account <you>*, and the token scopes should include `repo`.
+
+### B. Create the mailbox (the owner, once per collaboration)
+
+**B1. Create a private repo.** It holds no code.
+```
+gh repo create <owner>/feature-x-sync --private --description "Claude sync mailbox for feature X"
+```
+(Or use the website: *New repository → Private*.)
+
+**B2. Invite your colleague.**
+```
+gh api -X PUT repos/<owner>/feature-x-sync/collaborators/<their-github-username> -f permission=push
+```
+(Or on the website: *Settings → Collaborators → Add people*.)
+
+**B3. Your colleague accepts the invitation,** either from the email GitHub sends or at `https://github.com/<owner>/feature-x-sync/invitations`. Until they accept, they can't see the repo.
+
+**B4. Tell your colleague the mailbox name** (`<owner>/feature-x-sync`) and which role each of you takes, normally `impl` for the implementation side and `spec` for the spec side.
+
+The labels get created in step C2, so there's nothing else to do here.
+
+### C. Install and configure (both developers)
+
+**C1. Install the plugin.** In Claude Code (any folder):
+```
+/plugin marketplace add DylanTre/claude-to-claude-communication
 /plugin install sync-mailbox@claude-sync
 ```
+Then exit and restart Claude Code. The plugin is installed for your user, but it does nothing in a project until you configure it in C2.
 
-Then restart Claude Code. The plugin is installed for your user, but it does nothing in a project until step 4.
+> To try out a local copy instead, use `/plugin marketplace add <path to a clone of this repo>`.
 
-> To test from a local copy, use `/plugin marketplace add <path to this folder>` instead.
+**C2. Configure each project.** Follow [Configure each project](#configure-each-project) below.
 
-### 4. Configure each project (both developers)
+**C3. Turn on notifications.** Follow [Turn on GitHub notifications](#turn-on-github-notifications) below.
+
+**C4. Smoke test,** about 2 minutes:
+1. Implementation side: `/sync-ask this is a setup test, invent a trivial question`, approve it, and note the issue number.
+2. Spec side: restart Claude Code. The session-start notice should mention the issue. Then run `/sync-reply <n>` and approve.
+3. Implementation side: restart. The notice should say *1 answers to review*. Then run `/sync-close <n>`.
+
+If all three work, you're done.
+
+---
+
+## One-time setup: details
+
+### Configure each project
 
 Open Claude Code in the project where you work on the feature (the implementation side in the code repo; the spec side wherever the spec lives) and run:
 
@@ -116,7 +181,7 @@ It will:
 
 Repeat this in every project where you want the mailbox active. Projects without the config are completely unaffected.
 
-### 5. Turn on GitHub notifications (both developers, recommended)
+### Turn on GitHub notifications
 
 On the mailbox repo, choose *Watch → All activity*. You'll get email or mobile notifications even when Claude Code is closed.
 
@@ -156,7 +221,7 @@ On the mailbox repo, choose *Watch → All activity*. You'll get email or mobile
 
 ### `/sync-setup`
 
-One-time setup per project; see [step 4](#4-configure-each-project-both-developers). Run it again whenever you want to check the setup, change the mailbox repo, or change your role. If a config already exists it shows it and asks before changing anything.
+One-time setup per project; see [Configure each project](#configure-each-project). Run it again whenever you want to check the setup, change the mailbox repo, or change your role. If a config already exists it shows it and asks before changing anything.
 
 ### `/sync-ask [topic]`
 
@@ -355,7 +420,7 @@ SYNC_MAILBOX_ROLE=impl
 
 Maintainer:
 1. Bump `version` in `plugins/sync-mailbox/.claude-plugin/plugin.json`.
-2. Commit and push to the mailbox repo.
+2. Commit and push to the plugin repo (`DylanTre/claude-to-claude-communication`).
 
 Both developers:
 ```
