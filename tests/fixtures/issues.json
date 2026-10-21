@@ -1,0 +1,7 @@
+[
+  {"number": 9, "title": "Is \"null\"\tallowed?", "labels": [{"name": "for:impl"}, {"name": "status:awaiting-answer"}, {"name": "from:spec"}, {"name": "blocking"}]},
+  {"number": 8, "title": "Answered by spec", "labels": [{"name": "for:spec"}, {"name": "status:answered"}, {"name": "from:impl"}]},
+  {"number": 7, "title": "Needs more info", "labels": [{"name": "from:spec"}, {"name": "status:needs-info"}, {"name": "for:impl"}]},
+  {"number": 5, "title": "Answered for spec", "labels": [{"name": "from:spec"}, {"name": "status:answered"}, {"name": "for:impl"}]},
+  {"number": 3, "title": "Retry limit undefined", "labels": [{"name": "for:spec"}, {"name": "status:awaiting-answer"}, {"name": "from:impl"}]}
+]
