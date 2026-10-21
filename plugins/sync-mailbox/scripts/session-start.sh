@@ -5,8 +5,16 @@
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$here/lib.sh"
 
-sync_load_config "${CLAUDE_PROJECT_DIR:-$PWD}" || exit 0
-case "$SYNC_MAILBOX_REPO$SYNC_MAILBOX_ROLE" in *'"'*|*'\'*) exit 0;; esac
+project="${CLAUDE_PROJECT_DIR:-$PWD}"
+[ -f "$project/.claude/sync-mailbox.env" ] || exit 0
+
+invalid_config() {
+  echo "Sync mailbox: .claude/sync-mailbox.env is invalid (needs SYNC_MAILBOX_REPO=owner/name and a SYNC_MAILBOX_ROLE slug). Run /sync-setup to fix."
+  exit 0
+}
+sync_load_config "$project" || invalid_config
+case "$SYNC_MAILBOX_REPO$SYNC_MAILBOX_ROLE" in *'"'*|*'\'*) invalid_config;; esac
+case "$SYNC_MAILBOX_ROLE" in *[!A-Za-z0-9_-]*) invalid_config;; esac
 
 if ! items="$(bash "$here/inbox.sh" "$SYNC_MAILBOX_REPO" "$SYNC_MAILBOX_ROLE" 2>/dev/null)"; then
   echo "Sync mailbox: could not reach GitHub via gh (offline or not logged in?). Run /sync-setup to check."

@@ -2,6 +2,8 @@
 
 run_session() { bash "$PLUGIN_DIR/scripts/session-start.sh"; }
 
+INVALID="Sync mailbox: .claude/sync-mailbox.env is invalid (needs SYNC_MAILBOX_REPO=owner/name and a SYNC_MAILBOX_ROLE slug). Run /sync-setup to fix."
+
 test_session_no_config() {
   use_stub_gh; export CLAUDE_PROJECT_DIR="$(mk_project)"
   out="$(run_session)"; rc=$?
@@ -53,6 +55,18 @@ test_session_gh_missing() {
 test_session_bad_config() {
   use_stub_gh; export CLAUDE_PROJECT_DIR="$(mk_project)"; write_config "$CLAUDE_PROJECT_DIR" 'o/m"x' spec
   out="$(run_session)"; rc=$?
-  assert_eq "$rc" "0"; assert_empty "$out"
+  assert_eq "$rc" "0"
+  assert_eq "$out" "$INVALID"
   assert_empty "$(cat "$GH_LOG")"
+}
+
+test_session_bad_role() {
+  use_stub_gh; export CLAUDE_PROJECT_DIR="$(mk_project)"; write_config "$CLAUDE_PROJECT_DIR" o/m "a b"
+  assert_eq "$(run_session)" "$INVALID"
+}
+
+test_session_incomplete_config() {
+  use_stub_gh; export CLAUDE_PROJECT_DIR="$(mk_project)"
+  printf 'SYNC_MAILBOX_REPO=o/m\n' > "$CLAUDE_PROJECT_DIR/.claude/sync-mailbox.env"
+  assert_eq "$(run_session)" "$INVALID"
 }

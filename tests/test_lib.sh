@@ -50,3 +50,18 @@ test_scripts_lf() {
   done
   assert_empty "$bad"
 }
+
+test_config_quoted() {
+  load_lib; p="$(mk_project)"
+  printf 'SYNC_MAILBOX_REPO="o/m"\nSYNC_MAILBOX_ROLE='"'"'impl'"'"'\n' > "$p/.claude/sync-mailbox.env"
+  sync_load_config "$p" || fail "returned non-zero"
+  assert_eq "$SYNC_MAILBOX_REPO" "o/m"
+  assert_eq "$SYNC_MAILBOX_ROLE" "impl"
+}
+
+test_config_export_prefix() {
+  load_lib; p="$(mk_project)"
+  printf 'export SYNC_MAILBOX_REPO=o/m\nexport SYNC_MAILBOX_ROLE=impl\n' > "$p/.claude/sync-mailbox.env"
+  sync_load_config "$p" || fail "returned non-zero"
+  assert_eq "$SYNC_MAILBOX_REPO" "o/m"
+}

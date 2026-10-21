@@ -30,3 +30,32 @@ test_guard_no_config() {
   out="$(printf '{"tool_name":"Bash","tool_input":{"command":"gh issue close 3 --repo o/m"}}' | bash "$PLUGIN_DIR/scripts/guard-writes.sh")"; rc=$?
   assert_eq "$rc" "0"; assert_empty "$out"
 }
+
+test_guard_flag_before_verb() {
+  assert_eq "$(guard 'gh issue -R o/m close 3')" "$ASK"
+  assert_eq "$(guard 'gh issue --repo=o/m comment 3 --body-file x')" "$ASK"
+  assert_eq "$(guard 'gh -R o/m issue close 3')" "$ASK"
+}
+
+test_guard_line_continuation() {
+  export CLAUDE_PROJECT_DIR="$(mk_project)"; write_config "$CLAUDE_PROJECT_DIR" o/m impl
+  out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"gh issue \\n  comment 3 --repo o/m --body-file x"}}' | bash "$PLUGIN_DIR/scripts/guard-writes.sh")"
+  assert_eq "$out" "$ASK"
+}
+
+test_guard_repo_admin() {
+  assert_eq "$(guard 'gh repo edit o/m --visibility public')" "$ASK"
+  assert_eq "$(guard 'gh repo archive o/m')" "$ASK"
+}
+
+test_guard_description_ignored() {
+  export CLAUDE_PROJECT_DIR="$(mk_project)"; write_config "$CLAUDE_PROJECT_DIR" o/m impl
+  out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"gh issue list --repo o/m","description":"List issues to close or comment on"}}' | bash "$PLUGIN_DIR/scripts/guard-writes.sh")"
+  assert_empty "$out"
+}
+
+test_guard_quoted_config() {
+  export CLAUDE_PROJECT_DIR="$(mk_project)"
+  printf 'export SYNC_MAILBOX_REPO="o/m"\nSYNC_MAILBOX_ROLE=impl\n' > "$CLAUDE_PROJECT_DIR/.claude/sync-mailbox.env"
+  assert_eq "$(guard 'gh issue close 3 --repo o/m')" "$ASK"
+}

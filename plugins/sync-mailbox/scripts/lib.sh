@@ -12,7 +12,9 @@ sync_load_config() {
     case "$line" in ''|'#'*) continue;; *=*) ;; *) continue;; esac
     key="${line%%=*}"; value="${line#*=}"
     key="$(printf '%s' "$key" | tr -d '[:space:]')"
+    key="${key#export}"
     value="$(printf '%s' "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    case "$value" in \"*\"|\'*\') value="${value:1:${#value}-2}";; esac
     case "$key" in
       SYNC_MAILBOX_REPO) repo="$value";;
       SYNC_MAILBOX_ROLE) role="$value";;
