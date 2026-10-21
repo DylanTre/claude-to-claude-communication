@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Fake glab: logs argv to $GLAB_LOG, fails with $GLAB_EXIT.
+#  - api graphql: prints $GLAB_FIXTURE_DIR/<kind>.json, kind chosen from the
+#    status label in the query (answer|review|followup).
+#  - label create: with $GLAB_LABEL_EXISTS=1 fails like an existing label.
+[ -n "$GLAB_LOG" ] && echo "glab $*" | tr '\n' ' ' >> "$GLAB_LOG" && echo >> "$GLAB_LOG"
+if [ "${GLAB_EXIT:-0}" -ne 0 ]; then echo "stub glab: forced failure" >&2; exit "$GLAB_EXIT"; fi
+case "$*" in
+  *"label create"*)
+    if [ "${GLAB_LABEL_EXISTS:-0}" = 1 ]; then echo "POST .../labels: 409 {message: Label already exists}" >&2; exit 1; fi ;;
+  *"api"*graphql*)
+    case "$*" in
+      *status:awaiting-answer*) kind=answer;;
+      *status:answered*) kind=review;;
+      *status:needs-info*) kind=followup;;
+    esac
+    f="$GLAB_FIXTURE_DIR/$kind.json"
+    if [ -f "$f" ]; then cat "$f"; else echo '{"data":{"project":{"issues":{"nodes":[]}}}}'; fi ;;
+esac
+exit 0

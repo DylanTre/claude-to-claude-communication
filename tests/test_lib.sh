@@ -65,3 +65,31 @@ test_config_export_prefix() {
   sync_load_config "$p" || fail "returned non-zero"
   assert_eq "$SYNC_MAILBOX_REPO" "o/m"
 }
+
+test_config_default_provider() {
+  load_lib; p="$(mk_project)"; write_config "$p" o/m impl
+  sync_load_config "$p" || fail "returned non-zero"
+  assert_eq "$SYNC_MAILBOX_PROVIDER" "github"
+  assert_empty "$SYNC_MAILBOX_HOST"
+}
+
+test_config_gitlab() {
+  load_lib; p="$(mk_project)"; write_gitlab_config "$p" grp/sub/proj impl git.corp.example
+  sync_load_config "$p" || fail "returned non-zero"
+  assert_eq "$SYNC_MAILBOX_PROVIDER" "gitlab"
+  assert_eq "$SYNC_MAILBOX_HOST" "git.corp.example"
+  assert_eq "$SYNC_MAILBOX_REPO" "grp/sub/proj"
+}
+
+test_config_gitlab_default_host() {
+  load_lib; p="$(mk_project)"
+  printf 'SYNC_MAILBOX_PROVIDER=gitlab\nSYNC_MAILBOX_REPO=g/p\nSYNC_MAILBOX_ROLE=impl\n' > "$p/.claude/sync-mailbox.env"
+  sync_load_config "$p" || fail "returned non-zero"
+  assert_eq "$SYNC_MAILBOX_HOST" "gitlab.com"
+}
+
+test_config_bad_provider() {
+  load_lib; p="$(mk_project)"
+  printf 'SYNC_MAILBOX_PROVIDER=bitbucket\nSYNC_MAILBOX_REPO=g/p\nSYNC_MAILBOX_ROLE=impl\n' > "$p/.claude/sync-mailbox.env"
+  if sync_load_config "$p"; then fail "expected non-zero"; fi
+}

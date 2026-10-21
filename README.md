@@ -66,7 +66,7 @@ Both developers need:
 | A GitHub account | the mailbox is a GitHub repo |
 | Claude Code | runs the plugin |
 | Git (on Windows: Git for Windows, which includes Git Bash) | Claude Code and the plugin's bash scripts need it |
-| GitHub CLI (`gh`), logged in | all mailbox access goes through it |
+| GitHub CLI (`gh`), logged in, or the GitLab CLI (`glab`) for a GitLab mailbox | all mailbox access goes through it |
 | Collaborator access to the mailbox repo | to read and post |
 
 [Setup from scratch](#setup-from-scratch) walks through installing every one of these.
@@ -135,6 +135,30 @@ gh api -X PUT repos/<owner>/feature-x-sync/collaborators/<their-github-username>
 **B4. Tell your colleague the mailbox name** (`<owner>/feature-x-sync`) and which role each of you takes, normally `impl` for the implementation side and `spec` for the spec side.
 
 The labels get created in step C2, so there's nothing else to do here.
+
+### B (GitLab). Mailbox on your company GitLab instead
+
+Use this when the conversation should stay on your own servers. It replaces part B, and part A3/A4 is for `glab` instead of `gh`.
+
+**Install `glab`** (GitLab's official CLI), both developers:
+- Windows: `winget install --id GLab.GLab`
+- macOS: `brew install glab`
+- Linux: see https://gitlab.com/gitlab-org/cli#installation
+
+**Log in to your server**, both developers:
+```
+glab auth login --hostname gitlab.yourcompany.com
+glab auth status --hostname gitlab.yourcompany.com
+```
+When asked, paste a personal access token with the `api` scope (create one in GitLab under *Preferences → Access tokens*).
+
+**Create the mailbox project** (the owner): in GitLab, choose *New project → Create blank project*, set it to **Private**, and leave Issues enabled. For example: `team/sync/feature-x-sync`.
+
+**Invite your colleague** (the owner): *Manage → Members → Invite members*, with the role **Reporter** or higher. Reporter is enough to comment and change labels.
+
+**Reachability:** both developers must be able to reach the server. If your GitLab is only reachable on the office network or VPN, the remote side needs that connection. Without it, their session-start notice says *"could not reach GitLab … (offline, VPN, or not logged in?)"*.
+
+In `/sync-setup` (step C2), answer **GitLab**, give the host (`gitlab.yourcompany.com`) and the project path (`team/sync/feature-x-sync`). Everything else works the same as on GitHub. You can have GitHub mailboxes in some projects and GitLab mailboxes in others.
 
 ### C. Install and configure (both developers)
 
@@ -404,10 +428,21 @@ SYNC_MAILBOX_REPO=acme/feature-x-sync
 SYNC_MAILBOX_ROLE=impl
 ```
 
+GitLab example:
+
+```
+SYNC_MAILBOX_PROVIDER=gitlab
+SYNC_MAILBOX_HOST=gitlab.yourcompany.com
+SYNC_MAILBOX_REPO=team/sync/feature-x-sync
+SYNC_MAILBOX_ROLE=impl
+```
+
 | Key | Meaning |
 |---|---|
-| `SYNC_MAILBOX_REPO` | the mailbox repo, `owner/name` |
+| `SYNC_MAILBOX_REPO` | the mailbox repo: `owner/name` on GitHub, `group/subgroup/project` on GitLab |
 | `SYNC_MAILBOX_ROLE` | your role; letters, digits, `-` and `_` only. Usually `impl` or `spec` |
+| `SYNC_MAILBOX_PROVIDER` | `github` (default) or `gitlab` |
+| `SYNC_MAILBOX_HOST` | GitLab only: your server, for example `gitlab.yourcompany.com` (default `gitlab.com`) |
 
 - `#` comment lines and blank lines are allowed. Windows line endings are fine.
 - No file means the plugin is inactive in that project: no notice, no guard, no network calls.
@@ -457,7 +492,7 @@ No. Questions reference the spec by location, whether that's a path at a commit 
 The mailbox carries the *decision*. The spec side makes the actual edit in their normal workflow and links it in the answer's "Spec change" field.
 
 **Can we use GitLab instead?**
-Not yet. The same design works with `glab`, but only GitHub is implemented.
+Yes, including a self-hosted GitLab, so conversations stay on your servers. See [B (GitLab)](#b-gitlab-mailbox-on-your-company-gitlab-instead). The choice is made per project, so you can mix GitHub and GitLab mailboxes.
 
 **Is our code sent anywhere new?**
 Only the short previews and links you approve in each question, posted to your own private repo.

@@ -59,3 +59,19 @@ test_guard_quoted_config() {
   printf 'export SYNC_MAILBOX_REPO="o/m"\nSYNC_MAILBOX_ROLE=impl\n' > "$CLAUDE_PROJECT_DIR/.claude/sync-mailbox.env"
   assert_eq "$(guard 'gh issue close 3 --repo o/m')" "$ASK"
 }
+
+# guard_gl <command>: like guard, with a GitLab mailbox grp/proj on git.corp
+guard_gl() {
+  export CLAUDE_PROJECT_DIR="$(mk_project)"; write_gitlab_config "$CLAUDE_PROJECT_DIR" grp/proj impl git.corp
+  guard "$1"
+}
+
+test_guard_glab_note()   { assert_eq "$(guard_gl 'glab issue note 3 -R https://git.corp/grp/proj -m hi')" "$ASK"; }
+test_guard_glab_update() { assert_eq "$(guard_gl 'glab issue update 3 -R grp/proj -u status:awaiting-answer -l status:answered')" "$ASK"; }
+test_guard_glab_create() { assert_eq "$(guard_gl 'glab issue create -R https://git.corp/grp/proj -t t --description-file f -l for:spec -y')" "$ASK"; }
+test_guard_glab_api()    { assert_eq "$(guard_gl 'glab api --hostname git.corp -X POST projects/grp%2Fproj/issues')" "$ASK"; }
+
+test_guard_glab_read() {
+  assert_empty "$(guard_gl 'glab issue view 3 -R https://git.corp/grp/proj --comments')"
+  assert_empty "$(guard_gl 'glab issue list -R grp/proj')"
+}

@@ -25,3 +25,16 @@ use_stub_gh() {
   GH_LOG="$(mktemp)"
   export GH_FIXTURE="${GH_FIXTURE:-$TESTS_DIR/fixtures/issues.json}"
 }
+
+# write_gitlab_config <dir> <repo> <role> <host>
+write_gitlab_config() {
+  printf 'SYNC_MAILBOX_PROVIDER=gitlab\nSYNC_MAILBOX_HOST=%s\nSYNC_MAILBOX_REPO=%s\nSYNC_MAILBOX_ROLE=%s\n' "$4" "$2" "$3" > "$1/.claude/sync-mailbox.env"
+}
+
+# use_stub_glab: put the fake glab first on PATH, log its calls to $GLAB_LOG
+use_stub_glab() {
+  export PATH="$TESTS_DIR/stub:$PATH"
+  export GLAB_LOG
+  GLAB_LOG="$(mktemp)"
+  export GLAB_FIXTURE_DIR="${GLAB_FIXTURE_DIR:-$TESTS_DIR/fixtures/gitlab}"
+}

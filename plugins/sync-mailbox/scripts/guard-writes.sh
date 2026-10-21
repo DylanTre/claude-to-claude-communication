@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook (Bash): forces a permission prompt for any gh write that
+# PreToolUse hook (Bash): forces a permission prompt for any gh/glab write that
 # targets the mailbox repo, whatever the user's allow-list or permission mode.
 # Matches text in the raw hook JSON, so it needs no JSON parser. Errs towards
 # asking: a gh command naming the repo asks if a write verb appears anywhere in
@@ -16,9 +16,10 @@ command="$(printf '%s' "$input" | grep -oE '"command"[[:space:]]*:[[:space:]]*"(
 command="$(printf '%s' "$command" | sed 's/\\[ntr]/ /g' | tr '[:upper:]' '[:lower:]')"
 repo="$(printf '%s' "$SYNC_MAILBOX_REPO" | tr '[:upper:]' '[:lower:]')"
 
-printf '%s' "$command" | grep -qF -- "$repo" || exit 0
-printf '%s' "$command" | grep -qE '(^|[^a-z0-9_.-])gh(\.exe)?[[:space:]]' || exit 0
-printf '%s' "$command" | grep -qwE 'create|comment|edit|close|reopen|delete|transfer|lock|unlock|pin|unpin|develop|clone|api|archive|unarchive|rename' || exit 0
+# The GitLab API also accepts the project path URL-encoded (group%2Fproject).
+printf '%s' "$command" | grep -qF -e "$repo" -e "${repo//\//%2f}" || exit 0
+printf '%s' "$command" | grep -qE '(^|[^a-z0-9_.-])(gh|glab)(\.exe)?[[:space:]]' || exit 0
+printf '%s' "$command" | grep -qwE 'create|comment|edit|close|reopen|delete|transfer|lock|unlock|pin|unpin|develop|clone|api|archive|unarchive|rename|note|update|subscribe|unsubscribe' || exit 0
 
 echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"sync-mailbox: posting to the shared mailbox needs your explicit approval"}}'
 exit 0

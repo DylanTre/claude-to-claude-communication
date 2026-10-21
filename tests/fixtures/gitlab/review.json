@@ -1,0 +1,14 @@
+{
+  "data": {
+    "project": {
+      "issues": {
+        "nodes": [
+          {
+            "iid": "8",
+            "title": "Answered by spec"
+          }
+        ]
+      }
+    }
+  }
+}

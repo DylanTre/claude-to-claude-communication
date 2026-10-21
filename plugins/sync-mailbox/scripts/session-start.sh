@@ -13,13 +13,19 @@ invalid_config() {
   exit 0
 }
 sync_load_config "$project" || invalid_config
-case "$SYNC_MAILBOX_REPO$SYNC_MAILBOX_ROLE" in *'"'*|*'\'*) invalid_config;; esac
+case "$SYNC_MAILBOX_REPO$SYNC_MAILBOX_ROLE$SYNC_MAILBOX_HOST" in *'"'*|*'\'*) invalid_config;; esac
 case "$SYNC_MAILBOX_ROLE" in *[!A-Za-z0-9_-]*) invalid_config;; esac
 
-if ! items="$(bash "$here/inbox.sh" "$SYNC_MAILBOX_REPO" "$SYNC_MAILBOX_ROLE" 2>/dev/null)"; then
-  echo "Sync mailbox: could not reach GitHub via gh (offline or not logged in?). Run /sync-setup to check."
+if ! items="$(bash "$here/inbox.sh" "$SYNC_MAILBOX_REPO" "$SYNC_MAILBOX_ROLE" "$SYNC_MAILBOX_PROVIDER" "$SYNC_MAILBOX_HOST" 2>/dev/null)"; then
+  if [ "$SYNC_MAILBOX_PROVIDER" = gitlab ]; then
+    echo "Sync mailbox: could not reach GitLab ($SYNC_MAILBOX_HOST) via glab (offline, VPN, or not logged in?). Run /sync-setup to check."
+  else
+    echo "Sync mailbox: could not reach GitHub via gh (offline or not logged in?). Run /sync-setup to check."
+  fi
   exit 0
 fi
+where="$SYNC_MAILBOX_REPO"
+[ "$SYNC_MAILBOX_PROVIDER" = gitlab ] && where="$SYNC_MAILBOX_HOST/$SYNC_MAILBOX_REPO"
 [ -n "$items" ] || exit 0
 
 # numbers_for <kind>: "#3, #7" for items of that kind
@@ -36,6 +42,6 @@ done
 
 summary="$(IFS='|'; printf '%s' "${parts[*]}")"
 summary="${summary//|/, }"
-msg="Sync mailbox ($SYNC_MAILBOX_REPO, role $SYNC_MAILBOX_ROLE): $summary. Tell the user briefly and offer /sync-inbox."
+msg="Sync mailbox ($where, role $SYNC_MAILBOX_ROLE): $summary. Tell the user briefly and offer /sync-inbox."
 printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$msg"
 exit 0

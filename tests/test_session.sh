@@ -70,3 +70,15 @@ test_session_incomplete_config() {
   printf 'SYNC_MAILBOX_REPO=o/m\n' > "$CLAUDE_PROJECT_DIR/.claude/sync-mailbox.env"
   assert_eq "$(run_session)" "$INVALID"
 }
+
+test_session_gitlab_items() {
+  use_stub_glab; export CLAUDE_PROJECT_DIR="$(mk_project)"; write_gitlab_config "$CLAUDE_PROJECT_DIR" grp/proj impl git.corp
+  out="$(run_session)" || fail "non-zero exit"
+  assert_eq "$(printf '%s' "$out" | jq -r .hookSpecificOutput.additionalContext | tr -d '\r')" \
+    "Sync mailbox (git.corp/grp/proj, role impl): 2 to answer [#4, #9], 1 answers to review [#8]. Tell the user briefly and offer /sync-inbox."
+}
+
+test_session_gitlab_fails() {
+  use_stub_glab; export GLAB_EXIT=1; export CLAUDE_PROJECT_DIR="$(mk_project)"; write_gitlab_config "$CLAUDE_PROJECT_DIR" grp/proj impl git.corp
+  assert_eq "$(run_session)" "Sync mailbox: could not reach GitLab (git.corp) via glab (offline, VPN, or not logged in?). Run /sync-setup to check."
+}
